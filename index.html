@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Шутка по Голосу</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #1a202c; /* Dark background */
+            color: #e2e8f0; /* Light text */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .container {
+            background-color: #2d3748; /* Darker container */
+            border-radius: 1rem; /* Rounded corners */
+            padding: 2.5rem; /* P-10 */
+            box-shadow: 0 10px 15px rgba(0, 0, 0, 0.3); /* Shadow */
+            max-width: 600px;
+            width: 100%;
+            text-align: center;
+        }
+        h1 {
+            color: #63b3ed; /* Blue-500 */
+            margin-bottom: 1.5rem; /* Mb-6 */
+        }
+        button {
+            @apply px-6 py-3 rounded-lg text-white font-bold transition-all duration-200 ease-in-out;
+            background-color: #4299e1; /* Blue-400 */
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        button:hover {
+            background-color: #3182ce; /* Blue-500 */
+            transform: translateY(-2px);
+        }
+        button:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        button:disabled {
+            background-color: #a0aec0; /* Gray-400 */
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        #status-display {
+            @apply mt-6 text-lg;
+            color: #cbd5e0; /* Gray-300 */
+        }
+        #joke-display {
+            @apply mt-4 p-4 rounded-lg bg-gray-700 text-gray-100 italic;
+            min-height: 80px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1 class="text-3xl font-bold">Шутка по Голосу</h1>
+        
+        <button id="listenButton">Начать слушать</button>
+        
+        <p id="status-display" class="text-gray-300">Инициализация...</p>
+        
+        <div id="joke-display" class="text-gray-100">
+            Здесь появится шутка.
+        </div>
+    </div>
+
+    <script>
+        // --- UI Elements ---
+        const listenButton = document.getElementById('listenButton');
+        const statusDisplay = document.getElementById('status-display');
+        const jokeDisplay = document.getElementById('joke-display');
+
+        // --- State Variables ---
+        let listening = false;
+        let ttsVoicesLoaded = false;
+        let currentUtterance = null; // To keep track of the current speech utterance
+
+        // --- Speech Recognition (STT) Setup ---
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+        if (!SpeechRecognition) {
+            statusDisplay.textContent = "Извините, Speech Recognition API не поддерживается вашим браузером.";
+            listenButton.disabled = true;
+            console.error("Speech Recognition API not supported.");
+        } else {
+            const recognition = new SpeechRecognition();
+            recognition.continuous = false; // Listen for a single utterance
+            recognition.lang = 'ru-RU'; // Language for recognition (Russian)
+            recognition.interimResults = false; // Only return final results
+            recognition.maxAlternatives = 1; // Get only the most probable result
+
+            // --- Speech Recognition Event Handlers ---
+            recognition.onstart = () => {
+                listening = true;
+                listenButton.textContent = "Слушаю...";
+                listenButton.disabled = true; // Disable button while listening
+                statusDisplay.textContent = "Скажите 'Привет, расскажи шутку'...";
+                console.log("Speech Recognition started.");
+            };
+
+            recognition.onresult = async (event) => {
+                listening = false; // Recognition stops after result
+                listenButton.textContent = "Начать слушать"; // Reset button text
+                listenButton.disabled = false; // Re-enable button
+
+                const transcript = event.results[0][0].transcript.toLowerCase();
+                console.log("Вы сказали:", transcript);
+                statusDisplay.textContent = `Вы сказали: "${transcript}"`;
+
+                if (transcript.includes("привет") && transcript.includes("расскажи шутку")) {
+                    statusDisplay.textContent = "Команда распознана! Ищу шутку...";
+                    const joke = await fetchJoke();
+                    if (joke) {
+                        speakText(joke); // Use TTS to speak the joke
+                    }
+                } else {
+                    statusDisplay.textContent = "Команда не распознана. Попробуйте еще раз.";
+                    speakText("Извините, я не понял команду. Пожалуйста, скажите 'Привет, расскажи шутку'.");
+                }
+            };
+
+            recognition.onend = () => {
+                if (listening) { // If it ended without a result (e.g., timeout)
+                    listening = false;
+                    listenButton.textContent = "Начать слушать";
+                    listenButton.disabled = false;
+                    if (!statusDisplay.textContent.includes("Вы сказали:")) {
+                        statusDisplay.textContent = "Ожидание команды...";
+                    }
+                    console.log("Speech Recognition ended (possibly due to timeout).");
+                }
+            };
+
+            recognition.onerror = (event) => {
+                listening = false;
+                listenButton.textContent = "Начать слушать";
+                listenButton.disabled = false;
+                statusDisplay.textContent = `Ошибка распознавания речи: ${event.error}. Проверьте консоль.`;
+                console.error("Speech Recognition error:", event.error);
+                if (event.error === 'not-allowed') {
+                    statusDisplay.textContent = "Ошибка: Доступ к микрофону запрещен. Разрешите его в настройках браузера.";
+                } else if (event.error === 'no-speech') {
+                    statusDisplay.textContent = "Не услышал речь. Попробуйте еще раз.";
+                } else if (event.error === 'aborted') {
+                    statusDisplay.textContent = "Распознавание прервано.";
+                }
+            };
+
+            // --- Listen Button Click Handler ---
+            listenButton.addEventListener('click', () => {
+                if (!listening) {
+                    recognition.start();
+                }
+            });
+        }
+
+        // --- Text-to-Speech (TTS) Setup ---
+        if (!('speechSynthesis' in window)) {
+            statusDisplay.textContent = "Извините, Text-to-Speech API не поддерживается вашим браузером.";
+            console.error("Text-to-Speech API not supported.");
+            // Disable STT button if TTS is not available, as it's part of the core functionality
+            listenButton.disabled = true;
+        } else {
+            // Event listener for when voices are loaded
+            window.speechSynthesis.addEventListener('voiceschanged', () => {
+                ttsVoicesLoaded = true;
+                console.log("TTS voices loaded. Available voices:", window.speechSynthesis.getVoices().map(v => v.name + " (" + v.lang + ")"));
+                statusDisplay.textContent = "Голоса TTS загружены. Нажмите кнопку 'Начать слушать'.";
+                listenButton.disabled = false; // Enable button once TTS is ready
+            });
+
+            // Check if voices are already loaded on DOMContentLoaded
+            document.addEventListener('DOMContentLoaded', () => {
+                if (window.speechSynthesis.getVoices().length > 0) {
+                    ttsVoicesLoaded = true;
+                    console.log("TTS voices available on DOMContentLoaded.");
+                    statusDisplay.textContent = "Голоса TTS доступны. Нажмите кнопку 'Начать слушать'.";
+                    listenButton.disabled = false;
+                } else {
+                    console.log("Waiting for 'voiceschanged' event for TTS voices...");
+                    listenButton.disabled = true; // Disable until voices are ready
+                }
+            });
+        }
+
+        // --- Function to fetch a joke from API ---
+        async function fetchJoke() {
+            try {
+                statusDisplay.textContent = "Загружаю шутку...";
+                jokeDisplay.textContent = "Загрузка...";
+                const response = await fetch('https://icanhazdadjoke.com/', {
+                    headers: {
+                        'Accept': 'application/json' // Request JSON format
+                    }
+                });
+                const data = await response.json();
+                if (data && data.joke) {
+                    jokeDisplay.textContent = data.joke;
+                    return data.joke;
+                } else {
+                    throw new Error("Не удалось получить шутку из API.");
+                }
+            } catch (error) {
+                console.error("Ошибка при загрузке шутки:", error);
+                statusDisplay.textContent = "Ошибка при загрузке шутки. Проверьте консоль.";
+                jokeDisplay.textContent = "Не удалось загрузить шутку.";
+                return null;
+            }
+        }
+
+        // --- Function to speak text using TTS ---
+        function speakText(text) {
+            if (!ttsVoicesLoaded) {
+                console.warn("TTS voices not loaded yet. Cannot speak.");
+                statusDisplay.textContent = "Голоса TTS не загружены, попробуйте позже.";
+                return;
+            }
+            if (window.speechSynthesis.speaking) {
+                console.warn("TTS is already speaking. Aborting new utterance.");
+                window.speechSynthesis.cancel(); // Cancel current speech
+            }
+
+            currentUtterance = new SpeechSynthesisUtterance(text);
+
+            // Select a voice (prioritize Russian if available, else default)
+            const voices = window.speechSynthesis.getVoices();
+            const russianVoice = voices.find(voice => voice.lang === 'ru-RU');
+            if (russianVoice && text.match(/[\u0400-\u04FF]/)) { // Check if text contains Cyrillic
+                currentUtterance.voice = russianVoice;
+                currentUtterance.lang = 'ru-RU';
+                console.log("Speaking Russian with voice:", russianVoice.name);
+            } else if (voices.length > 0) {
+                // Fallback to first available voice for English or if no Russian voice
+                currentUtterance.voice = voices[0];
+                currentUtterance.lang = voices[0].lang;
+                console.log("Speaking with default voice:", voices[0].name, "lang:", voices[0].lang);
+            } else {
+                // Final fallback if no voices are found (should be caught by ttsVoicesLoaded check)
+                currentUtterance.lang = 'en-US';
+                console.warn("No voices found for TTS. Using default browser voice with lang 'en-US'.");
+            }
+
+            currentUtterance.pitch = 1.0;
+            currentUtterance.rate = 1.0;
+
+            currentUtterance.onstart = () => {
+                listenButton.disabled = true; // Disable listening while speaking
+                console.log("TTS started.");
+            };
+            currentUtterance.onend = () => {
+                listenButton.disabled = false; // Re-enable listening after speaking
+                console.log("TTS ended.");
+                if (!listening) { // Only reset status if not actively listening for command
+                    statusDisplay.textContent = "Ожидание команды...";
+                }
+            };
+            currentUtterance.onerror = (event) => {
+                listenButton.disabled = false;
+                statusDisplay.textContent = `Ошибка озвучки: ${event.error}.`;
+                console.error("TTS error:", event);
+            };
+
+            window.speechSynthesis.speak(currentUtterance);
+        }
+    </script>
+
+</body>
+</html>
