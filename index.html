@@ -237,22 +237,11 @@
             currentUtterance = new SpeechSynthesisUtterance(text);
 
             // Select a voice (prioritize Russian if available, else default)
-            const voices = window.speechSynthesis.getVoices();
-            const russianVoice = voices.find(voice => voice.lang === 'ru-RU');
-            if (russianVoice && text.match(/[\u0400-\u04FF]/)) { // Check if text contains Cyrillic
-                currentUtterance.voice = russianVoice;
-                currentUtterance.lang = 'ru-RU';
-                console.log("Speaking Russian with voice:", russianVoice.name);
-            } else if (voices.length > 0) {
-                // Fallback to first available voice for English or if no Russian voice
-                currentUtterance.voice = voices[0];
-                currentUtterance.lang = voices[0].lang;
-                console.log("Speaking with default voice:", voices[0].name, "lang:", voices[0].lang);
-            } else {
+            
                 // Final fallback if no voices are found (should be caught by ttsVoicesLoaded check)
-                currentUtterance.lang = 'en-US';
-                console.warn("No voices found for TTS. Using default browser voice with lang 'en-US'.");
-            }
+            currentUtterance.lang = 'en-US';
+            console.warn("No voices found for TTS. Using default browser voice with lang 'en-US'.");
+            
 
             currentUtterance.pitch = 1.0;
             currentUtterance.rate = 1.0;
